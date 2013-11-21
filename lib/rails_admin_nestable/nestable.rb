@@ -27,7 +27,7 @@ module RailsAdmin
             # Methods
             def update_tree(tree_nodes, parent_node = nil)
               tree_nodes.each do |key, value|
-                model = @abstract_model.model.find(value['id'].to_i)
+                model = @abstract_model.model.find(value['id'].to_s)
 
                 if parent_node.present?
                   model.parent = parent_node
@@ -49,7 +49,7 @@ module RailsAdmin
 
             def update_list(model_list)
               model_list.each do |key, value|
-                model = @abstract_model.model.find(value['id'].to_i)
+                model = @abstract_model.model.find(value['id'].to_s)
                 model.send("#{@nestable_conf.options[:position_field]}=".to_sym, (key.to_i + 1))
                 model.save!(validate: @nestable_conf.options[:enable_callback])
               end
@@ -57,14 +57,12 @@ module RailsAdmin
 
             if request.post? && params['tree_nodes'].present?
               begin
-                ActiveRecord::Base.transaction do
-                  if @nestable_conf.tree?
-                    update_tree params[:tree_nodes]
-                  end
+                if @nestable_conf.tree?
+                  update_tree params[:tree_nodes]
+                end
 
-                  if @nestable_conf.list?
-                    update_list params[:tree_nodes]
-                  end
+                if @nestable_conf.list?
+                  update_list params[:tree_nodes]
                 end
                 message = "<strong>#{I18n.t('admin.actions.nestable.success')}!</strong>"
               rescue Exception => e
@@ -75,25 +73,29 @@ module RailsAdmin
             end
 
             if request.get?
-              scope = begin
-                case @nestable_conf.options[:scope].class.to_s
-                when 'Proc'
-                  @nestable_conf.options[:scope].call
-                when 'Symbol'
-                  @abstract_model.model.public_send(@nestable_conf.options[:scope])
-                else
-                  nil
-                end
-              end
+              # scope = begin
+              #   case @nestable_conf.options[:scope].class.to_s
+              #   when 'Proc'
+              #     @nestable_conf.options[:scope].call
+              #   when 'Symbol'
+              #     @abstract_model.model.public_send(@nestable_conf.options[:scope])
+              #   else
+              #     nil
+              #   end
+              # end
 
-              query = list_entries(@model_config, :nestable, false, false).reorder(nil).merge(scope)
+              query = list_entries(@model_config, :nestable, false, false)#.reorder(nil).merge(scope)
 
               if @nestable_conf.tree?
                 @tree_nodes = query.arrange(order: @nestable_conf.options[:position_field])
               end
 
               if @nestable_conf.list?
-                @tree_nodes = query.order(@nestable_conf.options[:position_field])
+                @tree_nodes = if query.class.name == "Mongoid::Criteria"
+                  query.asc(@nestable_conf.options[:position_field])
+                else
+                  query.order(@nestable_conf.options[:position_field])
+                end
               end
 
               render action: @action.template_name
