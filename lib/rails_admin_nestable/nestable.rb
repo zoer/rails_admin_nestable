@@ -27,7 +27,7 @@ module RailsAdmin
             # Methods
             def update_tree(tree_nodes, parent_node = nil)
               tree_nodes.each do |key, value|
-                model = @abstract_model.model.find(value['id'].to_i)
+                model = @abstract_model.model.find(value['id'])
 
                 if parent_node.present?
                   model.parent = parent_node
@@ -49,7 +49,7 @@ module RailsAdmin
 
             def update_list(model_list)
               model_list.each do |key, value|
-                model = @abstract_model.model.find(value['id'].to_i)
+                model = @abstract_model.model.find(value['id'])
                 model.send("#{@nestable_conf.options[:position_field]}=".to_sym, (key.to_i + 1))
                 model.save!(validate: @nestable_conf.options[:enable_callback])
               end
@@ -57,14 +57,12 @@ module RailsAdmin
 
             if request.post? && params['tree_nodes'].present?
               begin
-                ActiveRecord::Base.transaction do
-                  if @nestable_conf.tree?
-                    update_tree params[:tree_nodes]
-                  end
+                if @nestable_conf.tree?
+                  update_tree params[:tree_nodes]
+                end
 
-                  if @nestable_conf.list?
-                    update_list params[:tree_nodes]
-                  end
+                if @nestable_conf.list?
+                  update_list params[:tree_nodes]
                 end
                 message = "<strong>#{I18n.t('admin.actions.nestable.success')}!</strong>"
               rescue Exception => e
@@ -86,15 +84,15 @@ module RailsAdmin
                 end
               end
 
-              query = list_entries(@model_config, :nestable, false, false).reorder(nil).merge(scope)
+              query = list_entries(@model_config, :nestable, false, false).unscoped
+              query = query.merge(scope) unless scope.nil?
               position_field = @nestable_conf.options[:position_field]
-
               if @nestable_conf.tree?
                 @tree_nodes = position_field.present?? query.arrange(order: position_field) : query.arrange
               end
 
               if @nestable_conf.list?
-                @tree_nodes = query.order(position_field)
+                @tree_nodes = query.order_by(position_field => 1)
               end
 
               render action: @action.template_name
